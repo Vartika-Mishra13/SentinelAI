@@ -3,6 +3,8 @@ const router = express.Router();
 
 const authMiddleware = require("../middleware/authMiddleware");
 const slidingLimiter = require("../middleware/slidingRateLimiter"); // ✅ FIXED IMPORT
+const fixedLimiter = require("../middleware/rateLimiter"); // ✅ FIXED IMPORT
+const requestLogger = require("../middleware/requestLogger"); // ✅ NEW
 
 const { generateApiKey, getUsage } = require("../controllers/userController");
 
@@ -18,17 +20,17 @@ router.get("/profile", authMiddleware, (req, res) => {
 });
 
 // 🔥 RATE LIMITED ROUTE (SLIDING WINDOW)
-router.get("/data", slidingLimiter, (req, res) => {
+router.get("/data", slidingLimiter,requestLogger, (req, res) => {
   res.json({
     message: "API key validated, access granted!",
     user: req.user.username
   });
 });
 
-const fixedLimiter = require("../middleware/rateLimiter");
+
 
 //FIXED WINDOW ROUTE
-router.get("/data-fixed", fixedLimiter, (req, res) => {
+router.get("/data-fixed", fixedLimiter,requestLogger, (req, res) => {
   res.json({
     message: "Fixed window rate limiting working",
     user: req.user.username

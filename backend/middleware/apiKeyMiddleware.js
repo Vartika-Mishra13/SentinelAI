@@ -10,6 +10,7 @@ const apiKeyMiddleware = async (req, res, next) => {
     const apiKey = req.headers["x-api-key"];
 
     if (!apiKey) {
+        res.locals.requestStatus = "Blocked"; // ← SET STATUS
       return res.status(401).json({
         message: "No API key provided"
       });
@@ -18,6 +19,7 @@ const apiKeyMiddleware = async (req, res, next) => {
     const user = await User.findOne({ apiKey });
 
     if (!user) {
+       res.locals.requestStatus = "Blocked"; // ← SET STATUS
       return res.status(401).json({
         message: "Invalid API key"
       });
@@ -44,6 +46,7 @@ const apiKeyMiddleware = async (req, res, next) => {
     if (blocked) {
 
       if (blocked.blockedUntil && blocked.blockedUntil > Date.now()) {
+         res.locals.requestStatus = "Blocked"; // ← SET STATUS
         return res.status(403).json({
           message: "IP temporarily blocked due to suspicious activity"
         });
@@ -61,6 +64,7 @@ const apiKeyMiddleware = async (req, res, next) => {
     const requests = await redisClient.get(key);
 
     if (requests && parseInt(requests) >= 500) {
+       res.locals.requestStatus = "Blocked"; // ← SET STATUS
       return res.status(429).json({
         message: "Rate limit exceeded (100 requests/hour)"
       });
@@ -85,7 +89,7 @@ const apiKeyMiddleware = async (req, res, next) => {
         reason: "Too many requests in short time",
         blockedUntil: new Date(Date.now() + 60 * 1000) // block for 1 minute
       });
-
+  res.locals.requestStatus = "Blocked"; // ← SET STATUS
       return res.status(403).json({
         message: "Suspicious activity detected. IP blocked for 1 minute."
       });
@@ -106,13 +110,15 @@ const apiKeyMiddleware = async (req, res, next) => {
     });
 
     console.log("Usage logged:", user.username, req.originalUrl);
+     // ✅ mark request as normal if passed
+    res.locals.requestStatus = "Normal";
 
     next();
 
   } catch (error) {
 
     console.error("API Key Middleware Error:", error);
-
+ res.locals.requestStatus = "Blocked"; // ← SET STATUS
     return res.status(500).json({
       message: "Server error"
     });

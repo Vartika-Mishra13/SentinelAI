@@ -24,37 +24,41 @@ const Dashboard = () => {
     localStorage.getItem("theme") === "dark"
   );
 
+  // 🖥 Admin stats
+  const [adminStats, setAdminStats] = useState(null);
+
   const token = localStorage.getItem("token");
 
   useEffect(() => {
     if (!token) window.location.href = "/login";
     if (!apiKey) generateApiKey();
-    else fetchData();
+    else {
+      fetchData();
+      fetchAdminStats();
+    }
   }, [token]);
 
+  // ========================== THREAT & AI LOGIC ==========================
   const calculateThreat = (used, limit) => {
     if (used >= limit) return "🔴 Attack Detected";
     if (used >= Math.ceil(limit * 0.6)) return "🟡 Suspicious Activity";
     return "🟢 Normal";
   };
-const detectAnomaly = (times) => {
-  const now = Date.now();
 
-  const last2Sec = times.filter((t) => now - t <= 2000);
-  const last10Sec = times.filter((t) => now - t <= 10000);
+  const detectAnomaly = (times) => {
+    const now = Date.now();
+    const last2Sec = times.filter((t) => now - t <= 2000);
+    const last10Sec = times.filter((t) => now - t <= 10000);
 
-  let alert = null;
+    let alert = null;
 
-  if (last2Sec.length >= 3) {
-    alert = "⚡ Burst Activity Detected";
-  } else if (last10Sec.length >= 5) {
-    alert = "📈 Traffic Spike Detected";
-  } else if (times.length >= requestsLimit - 1) {
-    alert = "🔥 Continuous High Usage";
-  }
+    if (last2Sec.length >= 3) alert = "⚡ Burst Activity Detected";
+    else if (last10Sec.length >= 5) alert = "📈 Traffic Spike Detected";
+    else if (times.length >= requestsLimit - 1) alert = "🔥 Continuous High Usage";
 
-  return alert;
-};
+    return alert;
+  };
+
   useEffect(() => {
     const interval = setInterval(() => {
       setRequestTimes((prev) => {
@@ -69,64 +73,73 @@ const detectAnomaly = (times) => {
     return () => clearInterval(interval);
   }, [requestsLimit]);
 
-  const recordRequest = (endpoint) => {
-    const now = Date.now();
-    const recent = [...requestTimes, now].filter((t) => now - t <= 60000);
-    setRequestTimes(recent);;
-    const used = recent.length;
-    const threat = calculateThreat(used, requestsLimit);
-    setThreatLevel(threat);
-    // 🤖 AI Detection
-const anomaly = detectAnomaly(recent);
+const recordRequest = (endpoint) => {
+  const now = Date.now();
 
-if (anomaly) {
-  toast.error(anomaly);
+  // Only keep requests from last 60 seconds
+  const recent = [...requestTimes, now].filter((t) => now - t <= 60000);
+  setRequestTimes(recent);
 
-  setAlerts((prev) => [
-    { time: new Date().toLocaleTimeString(), message: anomaly },
-    ...prev.slice(0, 5),
+  const used = recent.length;
+
+  // Update threat level based on sliding window
+  const threat = calculateThreat(used, requestsLimit);
+  setThreatLevel(threat);
+
+  // Detect anomalies for AI alerts
+  const anomaly = detectAnomaly(recent);
+  if (anomaly) {
+    toast.error(anomaly);
+    setAlerts((prev) => [
+      { time: new Date().toLocaleTimeString(), message: anomaly },
+      ...prev.slice(0, 5),
+    ]);
+  }
+
+  // Update chart and history
+  setChartData((prev) => [
+    ...prev,
+    { time: new Date().toLocaleTimeString(), requests: used },
   ]);
-}
 
-    setChartData((prev) => [
-      ...prev,
-      { time: new Date().toLocaleTimeString(), requests: used },
-    ]);
+  setHistory((prev) => [
+    {
+      time: new Date().toLocaleTimeString(),
+      threat,
+      endpoint,
+      requests: used,
+    },
+    ...prev.slice(0, 9),
+  ]);
 
-    setHistory((prev) => [
-      {
-        time: new Date().toLocaleTimeString(),
-        threat,
-        endpoint,
-        requests: used,
-      },
-      ...prev.slice(0, 9),
-    ]);
+  // Toast for attack/suspicious activity
+  if (threat === "🔴 Attack Detected")
+    toast.error(`🚨 Attack! (${used}/${requestsLimit})`);
+  else if (threat === "🟡 Suspicious Activity")
+    toast.warning(`⚠️ Suspicious (${used}/${requestsLimit})`);
+};
+  // ========================== API CALLS ==========================
+const fetchData = async () => {
+  if (!apiKey) return toast.warning("Generate API key first");
+  try {
+    setLoading(true);
 
-    if (threat === "🔴 Attack Detected")
-      toast.error(`🚨 Attack! (${used}/${requestsLimit})`);
-    else if (threat === "🟡 Suspicious Activity")
-      toast.warning(`⚠️ Suspicious (${used}/${requestsLimit})`);
-  };
+    // 1️⃣ Fetch user data
+    const res = await API.get("/user/data", { headers: { "x-api-key": apiKey } });
+    setData(res.data);
+    fetchAdminStats();
+    recordRequest("/user/data");
 
-  const fetchData = async () => {
-    if (!apiKey) return toast.warning("Generate API key first");
-    try {
-      setLoading(true);
-      const res = await API.get("/user/data", {
-        headers: { "x-api-key": apiKey },
-      });
-      setData(res.data);
-      recordRequest("/user/data");
-    } catch (err) {
-      if (err.response?.status === 429) {
-        toast.error("Rate limit exceeded");
-        setThreatLevel("🔴 Attack Detected");
-      }
-    } finally {
-      setLoading(false);
+    // 2️⃣ Fetch updated admin stats immediately
+  } catch (err) {
+    if (err.response?.status === 429) {
+      toast.error("Rate limit exceeded");
+      setThreatLevel("🔴 Attack Detected");
     }
-  };
+  } finally {
+    setLoading(false);
+  }
+};
 
   const generateApiKey = async () => {
     try {
@@ -143,6 +156,16 @@ if (anomaly) {
     }
   };
 
+  const fetchAdminStats = async () => {
+    try {
+      const res = await API.get("/admin/stats", { headers: { Authorization: `Bearer ${token}` } });
+      setAdminStats(res.data);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // ========================== UI STYLING ==========================
   const handleLogout = () => {
     localStorage.clear();
     window.location.href = "/login";
@@ -190,6 +213,7 @@ if (anomaly) {
     cursor: "pointer",
   };
 
+  // ========================== RENDER ==========================
   return (
     <div
       style={{
@@ -201,18 +225,35 @@ if (anomaly) {
     >
       <div style={{ display: "flex", justifyContent: "space-between" }}>
         <h1>🚀 SentinelAI Dashboard</h1>
-
-        <button
-          style={buttonStyle}
-          onClick={toggleTheme}
-          onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.8")}
-          onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
-        >
+        <button style={buttonStyle} onClick={toggleTheme}>
           {darkMode ? "☀️ Light" : "🌙 Dark"}
         </button>
       </div>
 
-      <div style={{ display: "flex", gap: "15px", flexWrap: "wrap" }}>
+      {/* =================== ADMIN STATS =================== */}
+      {adminStats && (
+        <div style={{ marginTop: "20px", display: "flex", gap: "15px", flexWrap: "wrap" }}>
+          <div style={cardBase}>
+            <h3>Total Requests</h3>
+            <p>{adminStats.totalRequests}</p>
+          </div>
+          <div style={cardBase}>
+            <h3>Normal</h3>
+            <p>{adminStats.normalRequests}</p>
+          </div>
+          <div style={cardBase}>
+            <h3>Suspicious</h3>
+            <p>{adminStats.suspiciousRequests}</p>
+          </div>
+          <div style={cardBase}>
+            <h3>Blocked</h3>
+            <p>{adminStats.blockedRequests}</p>
+          </div>
+        </div>
+      )}
+
+      {/* =================== EXISTING DASHBOARD =================== */}
+      <div style={{ display: "flex", gap: "15px", flexWrap: "wrap", marginTop: "20px" }}>
         {/* Threat */}
         <div
           style={{
@@ -220,79 +261,27 @@ if (anomaly) {
             borderLeft: `5px solid ${threatColor}`,
             boxShadow: `${threatGlow}, 0 2px 8px rgba(0,0,0,0.1)`,
           }}
-          onMouseEnter={(e) =>
-            (e.currentTarget.style.transform = "scale(1.02)")
-          }
-          onMouseLeave={(e) =>
-            (e.currentTarget.style.transform = "scale(1)")
-          }
         >
           <h2 style={{ color: threatColor }}>{threatLevel}</h2>
-          <p>
-            Requests: {requestTimes.length}/{requestsLimit}
-          </p>
+          <p>Requests: {requestTimes.length}/{requestsLimit}</p>
         </div>
 
         {/* API Key */}
-        <div
-          style={cardBase}
-          onMouseEnter={(e) =>
-            (e.currentTarget.style.transform = "scale(1.02)")
-          }
-          onMouseLeave={(e) =>
-            (e.currentTarget.style.transform = "scale(1)")
-          }
-        >
+        <div style={cardBase}>
           <h3>🔑 API Key</h3>
-          <p>
-            {showKey ? apiKey : apiKey.slice(0, 6) + "••••••••"}
-          </p>
-
-          <button
-            style={buttonStyle}
-            onClick={() => navigator.clipboard.writeText(apiKey)}
-            onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.8")}
-            onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
-          >
-            Copy
-          </button>
-
-          <button
-            style={{ ...buttonStyle, marginLeft: "5px" }}
-            onClick={() => setShowKey(!showKey)}
-            onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.8")}
-            onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
-          >
-            Show/Hide
-          </button>
-
-          <button
-            style={{ ...buttonStyle, marginLeft: "5px" }}
-            onClick={generateApiKey}
-            onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.8")}
-            onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
-          >
-            Regenerate
-          </button>
+          <p>{showKey ? apiKey : apiKey.slice(0, 6) + "••••••••"}</p>
+          <button style={buttonStyle} onClick={() => navigator.clipboard.writeText(apiKey)}>Copy</button>
+          <button style={{ ...buttonStyle, marginLeft: "5px" }} onClick={() => setShowKey(!showKey)}>Show/Hide</button>
+          <button style={{ ...buttonStyle, marginLeft: "5px" }} onClick={generateApiKey}>Regenerate</button>
         </div>
       </div>
 
+      {/* Refresh / Logout Buttons */}
       <div style={{ marginTop: "20px" }}>
-        <button
-          style={buttonStyle}
-          onClick={fetchData}
-          onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.8")}
-          onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
-        >
+        <button style={buttonStyle} onClick={fetchData}>
           {loading ? "⏳ Fetching..." : "🔄 Refresh Data"}
         </button>
-
-        <button
-          style={{ ...buttonStyle, marginLeft: "10px" }}
-          onClick={handleLogout}
-          onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.8")}
-          onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
-        >
+        <button style={{ ...buttonStyle, marginLeft: "10px" }} onClick={handleLogout}>
           🚪 Logout
         </button>
       </div>
@@ -310,15 +299,7 @@ if (anomaly) {
         <div style={{ ...cardBase, marginTop: "20px" }}>
           <h3>📝 History</h3>
           {history.map((h, i) => (
-            <div
-              key={i}
-              style={{
-                padding: "8px",
-                marginBottom: "6px",
-                borderRadius: "6px",
-                background: darkMode ? "#2a2a2a" : "#eee",
-              }}
-            >
+            <div key={i} style={{ padding: "8px", marginBottom: "6px", borderRadius: "6px", background: darkMode ? "#2a2a2a" : "#eee" }}>
               {h.time} - {h.threat}
               <br />
               <strong>{h.endpoint}</strong> ({h.requests})
@@ -326,28 +307,19 @@ if (anomaly) {
           ))}
         </div>
       )}
-{/* AI Alerts */}
-{alerts.length > 0 && (
-  <div style={{ ...cardBase, marginTop: "20px" }}>
-    <h3>🚨 AI Alerts</h3>
 
-    {alerts.map((a, i) => (
-      <div
-        key={i}
-        style={{
-          padding: "8px",
-          marginBottom: "6px",
-          borderRadius: "6px",
-          background: "#ff5252",
-          color: "#fff",
-          fontSize: "14px",
-        }}
-      >
-        {a.time} – {a.message}
-      </div>
-    ))}
-  </div>
-)}
+      {/* AI Alerts */}
+      {alerts.length > 0 && (
+        <div style={{ ...cardBase, marginTop: "20px" }}>
+          <h3>🚨 AI Alerts</h3>
+          {alerts.map((a, i) => (
+            <div key={i} style={{ padding: "8px", marginBottom: "6px", borderRadius: "6px", background: "#ff5252", color: "#fff", fontSize: "14px" }}>
+              {a.time} – {a.message}
+            </div>
+          ))}
+        </div>
+      )}
+
       <ToastContainer />
     </div>
   );

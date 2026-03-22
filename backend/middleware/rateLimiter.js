@@ -1,14 +1,18 @@
-const fixedLimiter = require("./apiKeyMiddleware");
+const fixedLimiter = require("./apiKeyMiddleware"); // fixed window
 const slidingLimiter = require("./slidingRateLimiter");
 
-// ⚡ SWITCH
-const MODE = "fixed"; // change to "sliding" later
+const MODE = "fixed"; // change to "sliding" if needed
 
-const rateLimiter = (req, res, next) => {
-  if (MODE === "sliding") {
-    return slidingLimiter(req, res, next);
-  } else {
-    return fixedLimiter(req, res, next);
+const rateLimiter = async (req, res, next) => {
+  try {
+    if (MODE === "sliding") {
+      await slidingLimiter(req, res, next);
+    } else {
+      await fixedLimiter(req, res, next);
+    }
+  } catch (error) {
+    res.locals.requestStatus = "Blocked"; // fallback
+    return res.status(500).json({ message: "Rate limiter error" });
   }
 };
 
