@@ -3,7 +3,7 @@ const Usage = require("../models/Usage");
 const redisClient = require("../config/redis");
 const BlockedIP = require("../models/BlockedIP");
 const requestLogger = require("./requestLogger");
-const { getGeoInfo, normalizeIp } = require("../utils/geoip");
+const { getGeoInfo, getGeoInfoAsync, normalizeIp } = require("../utils/geoip");
 const { getSecurityRules } = require("../utils/securityRules");
 
 const apiKeyMiddleware = async (req, res, next) => {
@@ -50,7 +50,7 @@ const apiKeyMiddleware = async (req, res, next) => {
       req.socket.remoteAddress ||
       req.ip ||
       "unknown";
-    const geo = getGeoInfo(rawIp);
+   const geo = await getGeoInfoAsync(rawIp);
     const ip = normalizeIp(rawIp);
 
     const blocked = await BlockedIP.findOne({ ipAddress: ip });

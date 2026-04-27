@@ -6,14 +6,14 @@ const mongoose = require("mongoose");
 const authRoutes = require("./routes/authRoutes");
 const userRoutes = require("./routes/userRoutes");
 const adminRoutes = require("./routes/adminRoutes");
-
+const threatDetection = require("./middleware/threatDetection");
 const app = express();
 
 app.set("trust proxy", true);
 
 app.use(cors());
 app.use(express.json());
-
+app.use(threatDetection);
 app.use("/api/user", userRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/auth", authRoutes);
