@@ -1,77 +1,80 @@
-const BlockedIP = require("../models/BlockedIP");        // ← add this
-const requestLogger = require("../middleware/requestLogger"); // ← add this
+const requestLogger = require("./requestLogger");
 const User = require("../models/User");
 const redisClient = require("../config/redis");
-
-const LIMIT = 5;      // testing
-const WINDOW = 60;    // seconds
+const { getSecurityRules } = require("../utils/securityRules");
 
 const slidingLimiter = async (req, res, next) => {
   try {
+    const rules = await getSecurityRules();
     const apiKey = req.headers["x-api-key"];
+
     if (!apiKey) {
       res.locals.requestStatus = "Blocked";
-      await requestLogger(req, res, () => {}); // log blocked request
+      res.locals.requestReason = "Missing API key";
+      await requestLogger(req, res, () => {});
       return res.status(401).json({ message: "No API key provided" });
     }
 
     const user = await User.findOne({ apiKey });
+
     if (!user) {
       res.locals.requestStatus = "Blocked";
+      res.locals.requestReason = "Invalid API key";
       await requestLogger(req, res, () => {});
       return res.status(401).json({ message: "Invalid API key" });
+    }
+
+    if (user.apiKeyBlocked) {
+      res.locals.requestStatus = "Blocked";
+      res.locals.requestReason = user.apiKeyBlockedReason || "Blocked API key";
+      await requestLogger(req, res, () => {});
+      return res.status(403).json({
+        message: user.apiKeyBlockedReason || "This API key has been blocked"
+      });
     }
 
     req.user = { _id: user._id, username: user.username };
     const key = `sliding_${user._id}`;
     const now = Date.now();
 
-    // get previous requests from Redis
     let requests = await redisClient.lRange(key, 0, -1);
     requests = requests.map(Number);
 
-    // filter within window
-    const validRequests = requests.filter(ts => now - ts < WINDOW * 1000);
+    const validRequests = requests.filter(
+      (timestamp) => now - timestamp < rules.slidingWindowSeconds * 1000
+    );
 
-    console.log("Valid Requests:", validRequests.length);
-
-    // ❌ Block if limit exceeded
-    if (validRequests.length >= LIMIT) {
+    if (validRequests.length >= rules.slidingLimit) {
       res.locals.requestStatus = "Blocked";
-
-      // Save blocked IP
-      await new BlockedIP({
-        ipAddress: req.ip,
-        blockedAt: new Date(),
-        reason: "Sliding rate limit exceeded"
-      }).save().catch(err => console.error("BlockedIP save failed:", err.message));
-
-      await requestLogger(req, res, () => {}); // log blocked request
+      res.locals.requestReason = `Sliding limit exceeded (${rules.slidingLimit}/${rules.slidingWindowSeconds}s)`;
+      await requestLogger(req, res, () => {});
       return res.status(429).json({ message: "Sliding rate limit exceeded" });
     }
 
-    // add new request
     validRequests.push(now);
 
-    // save back to Redis
     await redisClient.del(key);
-    for (let time of validRequests) {
-      await redisClient.rPush(key, time.toString());
+    for (const timestamp of validRequests) {
+      await redisClient.rPush(key, timestamp.toString());
     }
-    await redisClient.expire(key, WINDOW);
+    await redisClient.expire(key, rules.slidingWindowSeconds);
 
-    // mark suspicious if approaching limit
-    res.locals.requestStatus = validRequests.length >= Math.ceil(LIMIT * 0.6)
-      ? "Suspicious"
-      : "Normal";
+    res.locals.requestStatus =
+      validRequests.length >= Math.ceil(rules.slidingLimit * (rules.suspiciousThresholdPercent / 100))
+        ? "Suspicious"
+        : "Normal";
+    res.locals.requestReason =
+      res.locals.requestStatus === "Suspicious"
+        ? `Approaching sliding limit (${validRequests.length}/${rules.slidingLimit})`
+        : "Request accepted";
 
-    // log the request
     await requestLogger(req, res, () => {});
 
     next();
   } catch (error) {
     console.error("Sliding Rate Limiter Error:", error);
     res.locals.requestStatus = "Blocked";
+    res.locals.requestReason = "Sliding limiter error";
     await requestLogger(req, res, () => {});
     return res.status(500).json({ message: "Server error" });
   }

@@ -11,8 +11,13 @@ const generateApiKey = async (req, res) => {
 
     const user = await User.findByIdAndUpdate(
       userId,
-      { apiKey },
-      { new: true }
+      {
+        apiKey,
+        apiKeyBlocked: false,
+        apiKeyBlockedAt: null,
+        apiKeyBlockedReason: null
+      },
+      { returnDocument: "after" }
     );
 
     res.json({

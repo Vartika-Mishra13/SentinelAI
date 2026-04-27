@@ -12,45 +12,54 @@ const Login = () => {
         password,
       });
 
-      // ✅ Save token
       localStorage.setItem("token", res.data.token);
-
-      alert("✅ Login Successful!");
-
-      // 👉 Redirect to dashboard
       window.location.href = "/dashboard";
-
     } catch (err) {
       alert(err.response?.data?.message || "Login failed");
     }
   };
 
   return (
-    <div style={{ padding: "20px", fontFamily: "Arial" }}>
-      <h1>🔐 Login</h1>
+    <div className="auth-shell">
+      <div className="auth-card">
+        <span className="auth-kicker">Control Center Access</span>
+        <h1 className="auth-title">Sign in to SentinelAI</h1>
+        <p className="auth-copy">
+          Monitor abusive traffic, review live request patterns, and manage API key access from one clean security dashboard.
+        </p>
 
-      <input
-        type="email"
-        placeholder="Enter email"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        style={{ display: "block", marginBottom: "10px" }}
-      />
+        <div className="auth-form">
+          <label className="field-group">
+            <span className="field-label">Email</span>
+            <input
+              className="field-input"
+              type="email"
+              placeholder="name@company.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </label>
 
-      <input
-        type="password"
-        placeholder="Enter password"
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-        style={{ display: "block", marginBottom: "10px" }}
-      />
-<p>
-  Don't have an account?{" "}
-  <a href="/register">Register here</a>
-</p>
-      <button onClick={handleLogin}>
-        Login
-      </button>
+          <label className="field-group">
+            <span className="field-label">Password</span>
+            <input
+              className="field-input"
+              type="password"
+              placeholder="Enter your password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </label>
+
+          <button className="primary-button" onClick={handleLogin}>
+            Enter Dashboard
+          </button>
+        </div>
+
+        <p className="auth-footer">
+          Need an account? <a className="auth-link" href="/register">Create one here</a>
+        </p>
+      </div>
     </div>
   );
 };

@@ -9,6 +9,14 @@ const blockedIPSchema = new mongoose.Schema({
     type: String,
     default: "Suspicious activity"
   },
+  geoCountry: {
+    type: String,
+    default: "Unknown"
+  },
+  geoLabel: {
+    type: String,
+    default: "Unknown Region"
+  },
   blockedAt: {
     type: Date,
     default: Date.now

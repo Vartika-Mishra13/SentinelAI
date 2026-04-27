@@ -1,8 +1,12 @@
-import { render, screen } from '@testing-library/react';
-import App from './App';
+import { render, screen } from "@testing-library/react";
+import App from "./App";
 
-test('renders learn react link', () => {
+test("renders sentinel dashboard heading", () => {
+  localStorage.setItem("token", "test-token");
+  localStorage.setItem("apiKey", "sk_test");
+
   render(<App />);
-  const linkElement = screen.getByText(/learn react/i);
-  expect(linkElement).toBeInTheDocument();
+
+  const headingElement = screen.getByText(/sentinelai dashboard/i);
+  expect(headingElement).toBeInTheDocument();
 });

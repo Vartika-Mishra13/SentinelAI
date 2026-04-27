@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import API from "../services/api";
 
 const Register = () => {
+  const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
@@ -9,51 +10,74 @@ const Register = () => {
     e.preventDefault();
 
     try {
-     const res = await API.post("/auth/signup", {
-  email,
-  password,
-});
+      const res = await API.post("/auth/signup", {
+        username,
+        email,
+        password,
+      });
 
-alert(res.data.message || "✅ Registered successfully!");
-      // 👉 redirect to login
+      alert(res.data.message || "Registered successfully!");
       window.location.href = "/login";
-
     } catch (err) {
-      console.log(err.response);
-alert(JSON.stringify(err.response?.data));
+      alert(err.response?.data?.message || "Registration failed");
     }
   };
 
   return (
-    <div style={{ padding: "20px" }}>
-      <h2>📝 Register</h2>
+    <div className="auth-shell">
+      <div className="auth-card">
+        <span className="auth-kicker">New Workspace</span>
+        <h1 className="auth-title">Create your operator account</h1>
+        <p className="auth-copy">
+          Set up a secure account to generate API keys, inspect traffic history, and administer threat controls.
+        </p>
 
-      <form onSubmit={handleRegister}>
-        <input
-          type="email"
-          placeholder="Enter Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-        />
-        <br /><br />
+        <form className="auth-form" onSubmit={handleRegister}>
+          <label className="field-group">
+            <span className="field-label">Username</span>
+            <input
+              className="field-input"
+              type="text"
+              placeholder="Choose a username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              required
+            />
+          </label>
 
-        <input
-          type="password"
-          placeholder="Enter Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-        />
-        <br /><br />
+          <label className="field-group">
+            <span className="field-label">Email</span>
+            <input
+              className="field-input"
+              type="email"
+              placeholder="name@company.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+          </label>
 
-        <button type="submit">Register</button>
-      </form>
+          <label className="field-group">
+            <span className="field-label">Password</span>
+            <input
+              className="field-input"
+              type="password"
+              placeholder="Create a strong password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+          </label>
 
-      <p>
-        Already have an account?{" "}
-        <a href="/login">Login here</a>
-      </p>
+          <button className="primary-button" type="submit">
+            Create Account
+          </button>
+        </form>
+
+        <p className="auth-footer">
+          Already registered? <a className="auth-link" href="/login">Sign in here</a>
+        </p>
+      </div>
     </div>
   );
 };
